@@ -13,7 +13,7 @@ class Registration(FlaskForm):
     email = StringField(validators=[DataRequired(), Email()])
     password = PasswordField(validators=[DataRequired()])
     confirm_password = PasswordField(validators=[DataRequired(), EqualTo('password')])
-    
+
     
 class Login(FlaskForm):
     class Meta:
@@ -21,3 +21,14 @@ class Login(FlaskForm):
         
     email = StringField(validators=[DataRequired(), Email()])
     password = PasswordField(validators=[DataRequired()])
+    
+    
+
+class UpdateAccount(FlaskForm):
+    class Meta:
+        csrf = False  
+        
+    first_name = StringField(validators=[DataRequired(), Length(min=6, max=100)])
+    last_name = StringField(validators=[DataRequired(), Length(min=6, max=100)])
+    username = StringField(validators=[DataRequired(), Length(min=6, max=100)])
+    email = StringField(validators=[DataRequired(), Email()])
