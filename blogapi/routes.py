@@ -310,4 +310,48 @@ def post_comment(post_id):
             'status': 'success',
             'comments': comments_data
         }), 200
+
+
+@app.route('/tag-post', methods=['POST'])
+def tag_post():
+    data = request.get_json()
+    
+    if not data or 'tag_name' not in data or 'post_id' not in data:
+        return jsonify({
+            'status': 'error',
+            'message': 'tag_name and post_id are required'
+        }), 400
+    
+    post = Post.query.get_or_404(data['post_id'])
+    
+   
+    tag = Tag.query.filter_by(name=data['tag_name']).first()
+    
+    if not tag:
+        tag = Tag(
+            name=data['tag_name'],
+            description=data.get('description', '')
+        )
+        db.session.add(tag)
+    
+   
+    if tag not in post.tags:
+        post.tags.append(tag)
+        db.session.commit()
         
+        return jsonify({
+            'status': 'success',
+            'message': f'Post {data["post_id"]} tagged with "{data["tag_name"]}" successfully',
+            'post_id': data['post_id'],
+            'post_title': post.title,
+            'tag': {
+                'id': tag.id,
+                'name': tag.name,
+                'description': tag.description
+            }
+        }), 200
+    else:
+        return jsonify({
+            'status': 'info',
+            'message': f'Post {data["post_id"]} already has tag "{data["tag_name"]}"'
+        }), 200
