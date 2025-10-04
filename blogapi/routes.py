@@ -1,8 +1,8 @@
 from flask import request, jsonify
 from blogapi.authentication import Registration, Login, UpdateAccount, Posts
 from blogapi import app, bcrypt, db
-from blogapi.models import User, Post
-from datetime import datetime
+from blogapi.models import User, Post, Comment, Tag
+
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -186,9 +186,128 @@ def posts():
                 'errors': authentication.errors
             }), 400
     
-    return jsonify({
-        'message': 'Send POST request with post data to create a post'
-    })
+    elif request.method == 'GET':
+        posts = Post.query.all()
+        posts_data = []
+        for post in posts:
+            post_dict = {
+                'id': post.id,
+                'title': post.title,
+                'content': post.content,
+                'date_posted': post.date_posted.isoformat(),
+                'user_id': post.user_id
+            }
+            posts_data.append(post_dict)
+        
+        return jsonify({
+            'status': 'success',
+            'posts': posts_data
+        }), 200
+    
 
+@app.route('/posts/delete/<int:post_id>', methods=['DELETE'])
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if request.method == 'DELETE':
+        db.session.delete(post)
+        db.session.commit()
+        return jsonify({
+            'status': 'success',
+            'message': 'Your post has been deleted successfully'
+        }), 200
+            
+    return jsonify({
+        'message': 'Send DELETE request to delete a post'
+    }) 
+
+
+@app.route('/posts/update/<int:post_id>', methods=['PUT'])
+def update_post(post_id):
+    authentication = Posts ()
+    post = Post.query.get_or_404(post_id)
+    if request.method == 'PUT':
+        if authentication.validate_on_submit():
+            post.title = authentication.title.data
+            post.content = authentication.content.data
+            
+            db.session.commit()
+                
+            post_data = {
+                'post_id': post.id,
+                'title': post.title,
+                'content': post.content,
+                'date_posted': post.date_posted.isoformat()
+            }
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Your post has been updated successfully',
+                'post': post_data
+            }), 200
+            
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Post not updated',
+                'errors': authentication.errors
+            }), 400
+
+    return jsonify({
+        'message': 'Send PUT request with post data to update a post'
+    })
     
+
+@app.route('/posts/<int:post_id>/comments', methods=['GET', 'POST'])
+def post_comment(post_id):
+    post = Post.query.get_or_404(post_id)
     
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data or 'content' not in data or 'user_id' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Content is required to be able to comment'
+            }), 400
+        
+        comment = Comment(
+            content=data['content'],
+            user_id=data['user_id'],
+            post_id=post_id,   
+        )
+        
+        db.session.add(comment)
+        db.session.commit()
+        
+        comment_data = {
+            'id': comment.id,
+            'content': comment.content,
+            'date_posted': comment.date_posted.isoformat(),
+            'user_id': comment.user_id,
+            'post_id': comment.post_id, 
+        }
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Comment added successfully',
+            'comment': comment_data
+        }), 201
+    
+    elif request.method == 'GET':
+        comments = Comment.query.filter_by(post_id=post_id).all()
+        comments_data = []
+        
+        for comment in comments:
+            comment_dict = {
+                'id': comment.id,
+                'content': comment.content,
+                'date_posted': comment.date_posted.isoformat(),
+                'user_id': comment.user_id,
+                'author_username': comment.author.username,
+            }
+            comments_data.append(comment_dict)
+        
+        return jsonify({
+            'status': 'success',
+            'comments': comments_data
+        }), 200
+        
