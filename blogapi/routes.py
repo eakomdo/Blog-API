@@ -158,7 +158,25 @@ def posts():
             'status': 'success',
             'posts': posts_data
         }), 200
-    
+ 
+
+# Get a post by ID
+@app.route('/posts/<int:post_id>', methods=['GET'])
+def get_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if request.method == 'GET':
+        post_data = {
+            'id': post.id,
+            'title': post.title,
+            'content': post.content,
+            'date_posted': post.date_posted.isoformat(),
+            'user_id': post.user_id
+        }
+        return jsonify({
+            'status': 'success',
+            'post': post_data
+        }), 200
+       
 
 # Delete a post 
 @app.route('/posts/delete/<int:post_id>', methods=['DELETE'])
