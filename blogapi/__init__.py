@@ -1,14 +1,16 @@
+import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
+from dotenv import load_dotenv
 
 
 
-
+load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'fb9cf91dc75ad7e4a499d552d3f28b4f'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 

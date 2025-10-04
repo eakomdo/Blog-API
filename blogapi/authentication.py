@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField
+from wtforms import StringField, PasswordField, TextAreaField, SubmitField
 from wtforms.validators import DataRequired, Length, Email, EqualTo
 
 
@@ -32,3 +32,12 @@ class UpdateAccount(FlaskForm):
     last_name = StringField(validators=[DataRequired(), Length(min=6, max=100)])
     username = StringField(validators=[DataRequired(), Length(min=6, max=100)])
     email = StringField(validators=[DataRequired(), Email()])
+
+
+class Posts(FlaskForm):
+    class Meta:
+        csrf = False
+        
+    title = StringField('Title', validators=[DataRequired()])
+    content = TextAreaField('Content', validators=[DataRequired()])
+    submit = SubmitField('Post')
