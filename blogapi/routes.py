@@ -5,6 +5,7 @@ from blogapi.models import User, Post, Comment, Tag
 
 
 
+#registration route
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     authentication = Registration()
@@ -66,6 +67,7 @@ def register():
 
 
 
+# login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     authentication = Login()
@@ -101,56 +103,9 @@ def login():
         'message': 'Send POST request with email and password to login'
     })
     
-    
-@app.route('/logout', methods=['GET', 'POST'])
-def logout():
-    return jsonify({
-        'status': 'success',
-        'message': 'logout successful'
-        
-    }), 200
-    
-
-@app.route('/account', methods=['POST'])
-def account():
-    authentication = UpdateAccount()
-    if request.method == 'POST':
-        if authentication.validate_on_submit():
-            
-           
-            user = User(
-                first_name=authentication.first_name.data,
-                last_name=authentication.last_name.data,
-                username=authentication.username.data,
-                email=authentication.email.data,
-                
-            )
             
             
-            db.session.add(user)
-            db.session.commit()
-            
-            user_data = {
-                'first_name': authentication.first_name.data,
-                'last_name' : authentication.last_name.data,
-                'username': authentication.username.data,
-                'email' : authentication.email.data,
-            }
-            return jsonify ({
-                'status': 'success',
-                'message': 'user account updated successfuly',
-                'user': user_data
-            }), 201
-            
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': 'validation failed',
-                'errors': authentication.errors
-                
-            }), 400
-            
-            
+# Posts route
 @app.route('/posts', methods=['GET', 'POST'])
 def posts():
     authentication = Posts()
@@ -205,6 +160,7 @@ def posts():
         }), 200
     
 
+# Delete a post 
 @app.route('/posts/delete/<int:post_id>', methods=['DELETE'])
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
@@ -221,6 +177,7 @@ def delete_post(post_id):
     }) 
 
 
+# Update post 
 @app.route('/posts/update/<int:post_id>', methods=['PUT'])
 def update_post(post_id):
     authentication = Posts ()
@@ -257,6 +214,7 @@ def update_post(post_id):
     })
     
 
+# Comments route
 @app.route('/posts/<int:post_id>/comments', methods=['GET', 'POST'])
 def post_comment(post_id):
     post = Post.query.get_or_404(post_id)
@@ -312,6 +270,7 @@ def post_comment(post_id):
         }), 200
 
 
+# Tag post route
 @app.route('/tag-post', methods=['POST'])
 def tag_post():
     data = request.get_json()
