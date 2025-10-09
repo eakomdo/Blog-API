@@ -1,7 +1,62 @@
 from flask import request, jsonify
-from blogapi.authentication import Registration, Login, UpdateAccount, Posts
+from blogapi.authentication import Registration, Login, Posts
 from blogapi import app, bcrypt, db
 from blogapi.models import User, Post, Comment, Tag
+import jwt
+from datetime import datetime, timedelta
+from functools import wraps
+import os
+
+# JWT Configuration
+JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or os.environ.get('SECRET_KEY') or secrets.token_urlsafe(32)
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_TIME = 120
+
+def generate_token(user_id):
+    """Generate JWT token for authenticated user"""
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.utcnow() + timedelta(seconds=JWT_EXPIRATION_TIME),
+        'iat': datetime.utcnow()
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+def verify_token(token):
+    """Verify and decode JWT token"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return payload['user_id']
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+def token_required(f):
+    """Decorator to protect routes that require authentication"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        
+        if not token:
+            return jsonify({
+                'status': 'error',
+                'message': 'Token is missing'
+            }), 401
+        
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        user_id = verify_token(token)
+        if user_id is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Token is invalid or expired'
+            }), 401
+        
+        request.current_user_id = user_id
+        return f(*args, **kwargs)
+    
+    return decorated
 
 
 
@@ -40,7 +95,11 @@ def register():
             db.session.add(user)
             db.session.commit()
             
+            # Generate JWT token for auto-login
+            token = generate_token(user.id)
+            
             user_data = {
+                'id': user.id,
                 'first_name': authentication.first_name.data,
                 'last_name' : authentication.last_name.data,
                 'username': authentication.username.data,
@@ -49,6 +108,7 @@ def register():
             return jsonify ({
                 'status': 'success',
                 'message': 'user account created successfuly',
+                'token': token,
                 'user': user_data
             }), 201
             
@@ -78,12 +138,20 @@ def login():
             user = User.query.filter_by(email=authentication.email.data).first()
             
             if user and bcrypt.check_password_hash(user.password, authentication.password.data):
+                # Generate JWT token
+                token = generate_token(user.id)
+                
                 user_data = {
-                    'email': authentication.email.data,
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name
                 }
                 return jsonify({
                     'status': 'success',
                     'message': 'login successful',
+                    'token': token,
                     'user': user_data
                 }), 200
             else:
@@ -108,14 +176,31 @@ def login():
 # Posts route
 @app.route('/posts', methods=['GET', 'POST'])
 def posts():
-    authentication = Posts()
-    
     if request.method == 'POST':
+        # Check authentication for POST requests
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({
+                'status': 'error',
+                'message': 'Authentication required to create posts'
+            }), 401
+        
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        user_id = verify_token(token)
+        if user_id is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid or expired token'
+            }), 401
+        
+        authentication = Posts()
         if authentication.validate_on_submit():
             post = Post(
                 title=authentication.title.data,
                 content=authentication.content.data,
-                user_id=1
+                user_id=user_id  # Use actual authenticated user ID
             )
             
             db.session.add(post)
@@ -125,7 +210,8 @@ def posts():
                 'post_id': post.id,
                 'title': post.title,
                 'content': post.content,
-                'date_posted': post.date_posted.isoformat()
+                'date_posted': post.date_posted.isoformat(),
+                'user_id': post.user_id
             }
             
             return jsonify({
@@ -142,9 +228,9 @@ def posts():
             }), 400
     
     elif request.method == 'GET':
-        posts = Post.query.all()
+        all_posts = Post.query.all()
         posts_data = []
-        for post in posts:
+        for post in all_posts:
             post_dict = {
                 'id': post.id,
                 'title': post.title,
@@ -180,8 +266,17 @@ def get_post(post_id):
 
 # Delete a post 
 @app.route('/posts/delete/<int:post_id>', methods=['DELETE'])
+@token_required
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
+    
+    # Authorization check: only post owner can delete
+    if post.user_id != request.current_user_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'You can only delete your own posts'
+        }), 403
+    
     if request.method == 'DELETE':
         db.session.delete(post)
         db.session.commit()
@@ -197,9 +292,18 @@ def delete_post(post_id):
 
 # Update post 
 @app.route('/posts/update/<int:post_id>', methods=['PUT'])
+@token_required
 def update_post(post_id):
-    authentication = Posts ()
     post = Post.query.get_or_404(post_id)
+    
+    # Authorization check: only post owner can update
+    if post.user_id != request.current_user_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'You can only update your own posts'
+        }), 403
+    
+    authentication = Posts()
     if request.method == 'PUT':
         if authentication.validate_on_submit():
             post.title = authentication.title.data
@@ -211,7 +315,8 @@ def update_post(post_id):
                 'post_id': post.id,
                 'title': post.title,
                 'content': post.content,
-                'date_posted': post.date_posted.isoformat()
+                'date_posted': post.date_posted.isoformat(),
+                'user_id': post.user_id
             }
             
             return jsonify({
@@ -238,8 +343,26 @@ def post_comment(post_id):
     post = Post.query.get_or_404(post_id)
     
     if request.method == 'POST':
+        # Check authentication for POST requests
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({
+                'status': 'error',
+                'message': 'Authentication required to comment'
+            }), 401
+        
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        user_id = verify_token(token)
+        if user_id is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid or expired token'
+            }), 401
+        
         data = request.get_json()
-        if not data or 'content' not in data or 'user_id' not in data:
+        if not data or 'content' not in data:
             return jsonify({
                 'status': 'error',
                 'message': 'Content is required to be able to comment'
@@ -247,7 +370,7 @@ def post_comment(post_id):
         
         comment = Comment(
             content=data['content'],
-            user_id=data['user_id'],
+            user_id=user_id,  # Use authenticated user ID
             post_id=post_id,   
         )
         
@@ -290,6 +413,7 @@ def post_comment(post_id):
 
 # Tag post route
 @app.route('/tag-post', methods=['POST'])
+@token_required
 def tag_post():
     data = request.get_json()
     
@@ -301,6 +425,12 @@ def tag_post():
     
     post = Post.query.get_or_404(data['post_id'])
     
+    # Authorization check: only post owner can tag their posts
+    if post.user_id != request.current_user_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'You can only tag your own posts'
+        }), 403
    
     tag = Tag.query.filter_by(name=data['tag_name']).first()
     
